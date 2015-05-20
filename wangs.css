@@ -1,0 +1,36 @@
+* { margin: 0; padding: 0; }
+html, body { height: 100%; width: 100%; }
+canvas { display: block; }
+
+#helpButton {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 1.4em;
+    height: 1.4em;
+    background: #000;
+    color: #fff;
+    border: 2px solid #fff;
+    border-radius: 0.7em;
+    opacity: 0.9;
+    text-align: center;
+    font-weight: bold;
+    box-sizing: border-box;
+    cursor: pointer;
+}
+#helpButton:hover {
+    background: #fff;
+    color: #33f;
+    border-color: #33f;
+}
+
+#help {
+    position: absolute;
+    left: 1em;
+    bottom: 1em;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 1em;
+    opacity: 0.9;
+}
