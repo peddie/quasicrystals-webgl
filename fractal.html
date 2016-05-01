@@ -1,0 +1,362 @@
+    <!DOCTYPE html>
+    <html>
+    <meta charset="UTF-8">
+    <link href="wangs.css" rel="stylesheet" type="text/css">
+    <title>Mandelbrot explorer -- press ? for usage</title>
+    <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.1/jquery.min.js"></script>
+    <canvas id='c'></canvas>
+    <div id="helpButton">?</div>
+    <div id="help"><h2>Mandelbrot visualization -- divergence and stability</h2><br>
+    <h3>Keybindings:</h3><br>
+    up, left, down, right  navigate<br>
+    - and =                change zoom<br>
+    p (P)                  switch to single (double) precision (slow!)<br>
+    ?                      display this help message<br>
+    r and R 		   change red speed<br>
+    g and G 		   change green speed<br>
+    b and B 		   change blue speed<br>
+    e and t 		   change red phase<br>
+    f and h 		   change green phase<br>
+    v and n 		   change blue phase<br>
+    </div>
+    <script src='webgl-utils.js'></script>
+    <script id='vshader' type='x-shader'>
+    attribute vec2 aVertexPosition;
+
+void main() {
+
+    gl_Position = vec4(aVertexPosition, 0, 1);
+}
+</script>
+    <script id='fshader' type='x-shader'>
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+    precision highp float;
+#else
+precision mediump float;
+#endif
+
+precision mediump int;
+
+const float kPi = 3.1415926535;
+
+uniform int num_waves;
+uniform int prec;
+uniform float t;
+uniform vec2 freq;
+uniform vec2 res;
+uniform vec2 center;
+uniform vec3 speed;
+uniform vec3 phase;
+
+vec2 ds_set(float a) {
+    vec2 z;
+    z.x = a;
+    z.y = 0.0;
+    return z;
+}
+
+vec2 ds_add(vec2 dsa, vec2 dsb) {
+    vec2 dsc;
+    float t1, t2, e;
+
+    t1 = dsa.x + dsb.x;
+    e = t1 - dsa.x;
+    t2 = ((dsb.x - e) + (dsa.x - (t1 - e))) + dsa.y + dsb.y;
+
+    dsc.x = t1 + t2;
+    dsc.y = t2 - (dsc.x - t1);
+    return dsc;
+}
+
+vec2 ds_sub(vec2 dsa, vec2 dsb) {
+    vec2 negb;
+    negb.x = -dsb.x;
+    negb.y = -dsb.y;
+    return ds_add(dsa, negb);
+}
+
+vec2 ds_mul(vec2 dsa, vec2 dsb) {
+    vec2 dsc;
+    float c11, c21, c2, e, t1, t2;
+    float a1, a2, b1, b2, cona, conb, split = 8193.;
+
+    cona = dsa.x * split;
+    conb = dsb.x * split;
+    a1 = cona - (cona - dsa.x);
+    b1 = conb - (conb - dsb.x);
+    a2 = dsa.x - a1;
+    b2 = dsb.x - b1;
+
+    c11 = dsa.x * dsb.x;
+    c21 = a2 * b2 + (a2 * b1 + (a1 * b2 + (a1 * b1 - c11)));
+
+    c2 = dsa.x * dsb.y + dsa.y * dsb.x;
+
+    t1 = c11 + c2;
+    e = t1 - c11;
+    t2 = dsa.y * dsb.y + ((c2 - e) + (c11 - (t1 - e))) + c21;
+
+    dsc.x = t1 + t2;
+    dsc.y = t2 - (dsc.x - t1);
+
+    return dsc;
+}
+
+vec4 colormap(int cap, int iters) {
+    float capfl = float(cap);
+    float ifl = float(iters);
+    float div = ifl / capfl;
+    float s = sin(log(div));
+    float c = cos(log(div));
+    float tt = t / 100.0;
+    float r = s + sin(tt * speed.x + phase.x);
+    float g = c - cos(tt * speed.y + phase.y);
+    float b = 0.5 * sin(tt * speed.z + phase.z) + 0.5;
+    return vec4(r, g, b, 1.0);
+}
+
+vec4 iterate() {
+    float x = 0.0;
+    float y = 0.0;
+
+    float x0 = (freq.x * (gl_FragCoord.x / res.x - 0.5) + center.x) * (3.5 / 2.0);
+    float y0 = freq.x * (gl_FragCoord.y / res.y - 0.5) + center.y;
+
+    const int cap = 100;
+    int iter = 0;
+
+    for (int i = 0; i < cap; i++) {
+	iter = i;
+	float xsq = x*x;
+	float ysq = y*y;
+	if (xsq + ysq > 4.0) {
+            break;
+	}
+	float xtemp = xsq - ysq + x0;
+	y = 2.0*x*y + y0;
+	x = xtemp;
+    }
+
+    return colormap(cap, iter);
+}
+
+bool ds_gt(vec2 dsa, vec2 dsb) {
+    if (dsa.x > dsb.x) {
+	return true;
+    } else if (dsa.x < dsb.x) {
+    	return false;
+    } else if (dsa.y > dsb.y) {
+	return true;
+    }
+    return false;
+}
+
+vec4 iterate_double() {
+    vec2 x;
+    x = vec2(0.0, 0.0);
+    vec2 y;
+    y = vec2(0.0, 0.0);
+
+    vec2 x0 = ds_mul(ds_add(ds_mul(freq,
+				   ds_add(ds_mul(ds_set(gl_FragCoord.x),
+						 ds_set(1.0/res.x)),
+					  ds_set(-0.5))),
+			    ds_set(center.x)),
+		     ds_mul(ds_set(3.5), ds_set(0.5)));
+    vec2 y0 = ds_add(ds_mul(freq,
+			    ds_add(ds_mul(ds_set(gl_FragCoord.y),
+					  ds_set(1.0/res.y)),
+				   ds_set(-0.5))),
+		     ds_set(center.y));
+
+    const int cap = 1000;
+    int iter = 0;
+
+    for (int i = 0; i < cap; i++) {
+	iter = i;
+	vec2 xsq = ds_mul(x, x);
+	vec2 ysq = ds_mul(y, y);
+	vec2 sqr = ds_add(xsq, ysq);
+	if (ds_gt(sqr, ds_set(4.0))) {
+	    break;
+	}
+	vec2 xtemp = ds_add(ds_sub(xsq, ysq), x0);
+	y = ds_add(ds_mul(ds_mul(ds_set(2.0),x),y),y0);
+	x = xtemp;
+    }
+
+    return colormap(cap, iter);
+}
+
+void main() {
+    if (prec != 1) {
+	gl_FragColor = iterate_double();
+    } else {
+	gl_FragColor = iterate();
+    }
+}
+</script>
+    <script>
+    kPi = 3.1415926535;
+//return an obect with the dimension of the viewport of the browser
+if (!window.WebGLRenderingContext) {
+    // the browser doesn't even know what WebGL is
+    window.location = "http://get.webgl.org";
+} else {
+    var c = document.getElementById('c');
+    var gl = c.getContext('experimental-webgl');
+    if (!gl) {
+	window.location = "http://get.webgl.org/troubleshooting";
+    }
+    var kMaxNumWaves = 22;
+    var vertexPosBuffer = screenQuad(gl);
+
+    var vs = document.getElementById('vshader').textContent;
+    var fs = document.getElementById('fshader').textContent;
+    var program = createProgram(vs,fs);
+    gl.useProgram(program);
+    program.vertexPosAttrib = gl.getAttribLocation(program, 'aVertexPosition');
+    program.freq = gl.getUniformLocation(program, 'freq');
+    program.res = gl.getUniformLocation(program, 'res');
+    program.t = gl.getUniformLocation(program, 't');
+    program.center = gl.getUniformLocation(program, 'center');
+    program.prec = gl.getUniformLocation(program, 'prec');
+    program.speed = gl.getUniformLocation(program, 'speed');
+    program.phase = gl.getUniformLocation(program, 'phase');
+    program.num_waves = gl.getUniformLocation(program, 'num_waves');
+    gl.enableVertexAttribArray(program.vertexPosArray);
+    gl.vertexAttribPointer(program.vertexPosAttrib, vertexPosBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+    var prec = 1;
+    var dt = 1.0;
+    var olddt = 0.0;
+    var t = 0;
+    var freq = 1.0;
+    var n = 8;
+    var ra = 0;
+    var ga = 0.2 * kPi;
+    var ba = 0.5 * kPi;
+    var ck = 1.6;
+    var co = 0.7;
+    var x = 0.0;
+    var x_ = 0.0;
+    var y = 0.0;
+    var y_ = 0.0;
+    var rspeed = 1.0;
+    var gspeed = 1.0;
+    var bspeed = 1.0;
+    var rphase = 1.0;
+    var gphase = 1.0;
+    var bphase = 1.0;
+
+    var helpTimer;
+    var helpShown = false;
+    function toggleHelp() {
+        if (helpTimer) clearTimeout(helpTimer);
+        if (helpShown) {
+            helpShown = false;
+            $("#help").hide();
+        } else {
+            $("#help").show();
+            helpShown = true;
+            helpTimer = setTimeout(function () {
+                $("#help").fadeOut(1000);
+                helpShown = false;
+            }, 4000);
+        }
+    }
+
+    function keyhandler(e) {
+	if (e.which == ','.charCodeAt(0)) dt = dt - 0.1;
+	else if (e.which == '.'.charCodeAt(0)) dt = dt + 0.1;
+	else if (e.which == '-'.charCodeAt(0)) freq = freq*1.1;
+	else if (e.which == '_'.charCodeAt(0)) freq = freq*1.1;
+	else if (e.which == '='.charCodeAt(0)) freq = freq*0.909;
+	else if (e.which == '+'.charCodeAt(0)) freq = freq*0.909;
+	else if (e.which == 'p'.charCodeAt(0)) prec = 1;
+	else if (e.which == 'P'.charCodeAt(0)) prec = 2;
+	else if (e.which == 'r'.charCodeAt(0)) rspeed *= 1.05;
+	else if (e.which == 'R'.charCodeAt(0)) rspeed /= 0.95;
+	else if (e.which == 'g'.charCodeAt(0)) gspeed *= 1.05;
+	else if (e.which == 'G'.charCodeAt(0)) gspeed /= 0.95;
+	else if (e.which == 'b'.charCodeAt(0)) bspeed *= 1.05;
+	else if (e.which == 'B'.charCodeAt(0)) bspeed /= 0.95;
+	else if (e.which == 'e'.charCodeAt(0) ||
+		 e.which == 'E'.charCodeAt(0)) rphase -= 0.1;
+	else if (e.which == 't'.charCodeAt(0) ||
+		 e.which == 'T'.charCodeAt(0)) rphase += 0.1;
+	else if (e.which == 'f'.charCodeAt(0) ||
+		 e.which == 'F'.charCodeAt(0)) gphase -= 0.1;
+	else if (e.which == 'h'.charCodeAt(0) ||
+		 e.which == 'H'.charCodeAt(0)) gphase += 0.1;
+	else if (e.which == 'v'.charCodeAt(0) ||
+		 e.which == 'V'.charCodeAt(0)) bphase -= 0.1;
+	else if (e.which == 'n'.charCodeAt(0) ||
+		 e.which == 'N'.charCodeAt(0)) bphase += 0.1;
+	else if (e.which == '?'.charCodeAt(0)) toggleHelp();
+	else if (e.which == '/'.charCodeAt(0)) toggleHelp();
+	else if (e.which == ' '.charCodeAt(0)) {
+	    if (olddt == 0.0) {
+		olddt = dt; dt = 0.0;
+	    } else {
+		dt = olddt; olddt = 0.0;
+	    }
+	}
+	console.log(dt, freq, x, y, e.which, e.keyCode);
+    };
+
+    function arrowhandler(e) {
+	if (e.which == 37) x -= 0.1 * freq;
+	else if (e.which == 38) y += 0.1 * freq;
+	else if (e.which == 39) x += 0.1 * freq;
+	else if (e.which == 40) y -= 0.1 * freq;
+	else if (e.which == 33) { x = 0; y = 0; }
+	else if (e.which == 34) { x = 0; y = 0; freq = 1.0; }
+	console.log(dt, freq, x, y, e.which, e.keyCode);
+    };
+    document.onkeypress = keyhandler;
+    document.onkeydown = arrowhandler;
+
+    // Thanks, Erika!
+    function setsize() {
+	c.width = $(window).width();
+	c.height = $(window).height();
+	gl.uniform2f(program.res, c.width, c.height);
+	gl.viewport(0, 0, c.width, c.height);
+    };
+
+    $(window).on('resize', setsize);
+    $(window).on('load', setsize);
+
+    function draw() {
+	var f32 = new Float32Array(1);
+	f32[0] = freq;
+	gl.uniform2f(program.freq, freq, freq-f32[0]);
+	gl.uniform1f(program.t, t);
+	gl.uniform1i(program.num_waves, n);
+	gl.uniform1i(program.prec, prec);
+	gl.uniform2f(program.center, x, y);
+	gl.uniform3f(program.speed, rspeed, gspeed, bspeed);
+	gl.uniform3f(program.phase, rphase, gphase, bphase);
+	gl.drawArrays(gl.TRIANGLE_STRIP, 0, vertexPosBuffer.numItems);
+    }
+
+    function animate() {
+	t += dt;
+    }
+
+    function drawFrame() {
+	requestAnimationFrame(drawFrame);
+	draw();
+	animate();
+    }
+
+    drawFrame();
+}
+
+toggleHelp();
+$("#helpButton").click(function () {
+    toggleHelp();
+});
+</script>
+    </html>
