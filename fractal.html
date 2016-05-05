@@ -19,6 +19,7 @@
     f and h 		   change green phase<br>
     v and n 		   change blue phase<br>
     [ and ] 		   change exponent<br>
+    c 	  		   cycle color scheme<br>
     </div>
     <script src='webgl-utils.js'></script>
     <script id='vshader' type='x-shader'>
@@ -49,6 +50,78 @@ uniform vec2 res;
 uniform vec2 center;
 uniform vec3 speed;
 uniform vec3 phase;
+uniform sampler2D palette;
+uniform int coloring;
+
+vec4 colormap(int cap, int iters) {
+    float capfl = float(cap);
+    float ifl = float(iters);
+    float div = ifl / capfl;
+    float s = sin(log(div));
+    float c = cos(log(div));
+    float tt = t / 100.0;
+    float r = s + sin(tt * speed.x + phase.x);
+    float g = c - cos(tt * speed.y + phase.y);
+    float b = 0.5 * sin(tt * speed.z + phase.z) + 0.5;
+    return vec4(r, g, b, 1.0);
+}
+
+vec4 bettermap(int cap, int iters, float x, float y) {
+    float capfl = float(cap);
+    float ifl = float(iters);
+    if (coloring == 2 && iters < cap) {
+    	// sqrt of inner term removed using log simplification rules.
+    	float log_zn = log(x*x + y*y) / 2.0;
+    	float nu = log(log_zn / log(2.0)) / log(2.0);
+    	// Rearranging the potential function.
+    	// Dividing log_zn by log(2) instead of log(N = 1<<8)
+    	// because we want the entire palette to range from the
+    	// center to radius 2, NOT our bailout radius.
+    	ifl = ifl + 1.0 - nu;
+    } else if (coloring == 1) {
+	ifl = log(ifl);
+    } else if (coloring == 0) {
+	ifl = log(ifl) - log(capfl);
+    }
+
+    float map = 0.5 + sin(ifl + t / 256.0) * 0.5;
+    return texture2D(palette, vec2(map, 0.0));
+}
+
+vec4 iterate() {
+    float x = 0.0;
+    float y = 0.0;
+
+    float x0 = (freq.x * (gl_FragCoord.x / res.x - 0.5) + center.x) * (3.5 / 2.0);
+    float y0 = freq.x * (gl_FragCoord.y / res.y - 0.5) + center.y;
+
+    const int cap = 100;
+    int iter = 0;
+
+    for (int i = 0; i < cap; i++) {
+	iter = i;
+	float xsq = x*x;
+	float ysq = y*y;
+	if (xsq + ysq > 4.0) {
+            break;
+	}
+	float xtemp;
+	if (pow == 4) {
+	    xtemp = xsq*xsq + ysq*ysq - 6.0*xsq*ysq + x0;
+	    y = 4.0*x*y*(xsq - ysq) + y0;
+	} else if (pow == 3) {
+	    xtemp = xsq*x - 3.0*x*ysq + x0;
+	    y = 3.0*xsq*y - ysq*y + y0;
+	} else {
+	    xtemp = xsq - ysq + x0;
+	    y = 2.0*x*y + y0;
+	}
+	x = xtemp;
+    }
+
+    return bettermap(cap, iter, x, y);
+    // return colormap(cap, iter);
+}
 
 vec2 ds_set(float a) {
     vec2 z;
@@ -102,53 +175,6 @@ vec2 ds_mul(vec2 dsa, vec2 dsb) {
     dsc.y = t2 - (dsc.x - t1);
 
     return dsc;
-}
-
-vec4 colormap(int cap, int iters) {
-    float capfl = float(cap);
-    float ifl = float(iters);
-    float div = ifl / capfl;
-    float s = sin(log(div));
-    float c = cos(log(div));
-    float tt = t / 100.0;
-    float r = s + sin(tt * speed.x + phase.x);
-    float g = c - cos(tt * speed.y + phase.y);
-    float b = 0.5 * sin(tt * speed.z + phase.z) + 0.5;
-    return vec4(r, g, b, 1.0);
-}
-
-vec4 iterate() {
-    float x = 0.0;
-    float y = 0.0;
-
-    float x0 = (freq.x * (gl_FragCoord.x / res.x - 0.5) + center.x) * (3.5 / 2.0);
-    float y0 = freq.x * (gl_FragCoord.y / res.y - 0.5) + center.y;
-
-    const int cap = 100;
-    int iter = 0;
-
-    for (int i = 0; i < cap; i++) {
-	iter = i;
-	float xsq = x*x;
-	float ysq = y*y;
-	if (xsq + ysq > 4.0) {
-            break;
-	}
-	float xtemp;
-	if (pow == 4) {
-	    xtemp = xsq*xsq + ysq*ysq - 6.0*xsq*ysq + x0;
-	    y = 4.0*x*y*(xsq - ysq) + y0;
-	} else if (pow == 3) {
-	    xtemp = xsq*x - 3.0*x*ysq + x0;
-	    y = 3.0*xsq*y - ysq*y + y0;
-	} else {
-	    xtemp = xsq - ysq + x0;
-	    y = 2.0*x*y + y0;
-	}
-	x = xtemp;
-    }
-
-    return colormap(cap, iter);
 }
 
 bool ds_gt(vec2 dsa, vec2 dsb) {
@@ -209,6 +235,54 @@ void main() {
 </script>
     <script>
     kPi = 3.1415926535;
+function create_palette(palettesize) {
+    var palette_data = new Float32Array(palettesize * 4);
+    for (i = 0; i < palettesize; i++) {
+	// Fill in RGBA array.
+	palette_data[4*i] = 0.5 + Math.sin(kPi/2.0 * i / palettesize) / 2.0;
+	palette_data[4*i + 1] = 0.5 + Math.sin(kPi/2.0 * i / palettesize + 2.0*kPi / 3.0) / 2.0;
+	palette_data[4*i + 2] = 0.5 + Math.sin(kPi/2.0 * i / palettesize + 4.0*kPi / 3.0) / 2.0;
+	palette_data[4*i + 3] = 1.0;
+    }
+
+    return palette_data;
+};
+function isPowerOf2(value) {
+    return (value & (value - 1)) == 0;
+};
+function setupTextureFilteringAndMips(width, height) {
+    if (isPowerOf2(width) && isPowerOf2(height)) {
+	// the dimensions are power of 2 so generate mips and turn on
+	// tri-linear filtering.
+	gl.generateMipmap(gl.TEXTURE_2D);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    } else {
+	// at least one of the dimensions is not a power of 2 so set the filtering
+	// so WebGL will render it.
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    }
+};
+function textureFromFloats(gl,width,height,float32Array) {
+    var oldActive = gl.getParameter(gl.ACTIVE_TEXTURE);
+    gl.activeTexture(gl.TEXTURE15); // working register 31, thanks.
+
+    var texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA,
+                  width, height, 0,
+                  gl.RGBA, gl.FLOAT, float32Array);
+
+    setupTextureFilteringAndMips(width, height);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+
+    gl.activeTexture(oldActive);
+
+    return texture;
+};
 //return an obect with the dimension of the viewport of the browser
 if (!window.WebGLRenderingContext) {
     // the browser doesn't even know what WebGL is
@@ -217,15 +291,35 @@ if (!window.WebGLRenderingContext) {
     var c = document.getElementById('c');
     var gl = c.getContext('experimental-webgl');
     if (!gl) {
+	alert("Your browser won't work; I need WebGL!")
 	window.location = "http://get.webgl.org/troubleshooting";
     }
-    var kMaxNumWaves = 22;
+    if (!gl.getExtension("OES_texture_float")) {
+	alert("Your browser won't work; I need OES_texture_float in WebGL.");
+	window.location = "http://get.webgl.org/troubleshooting";
+    }
+    if (!gl.getExtension("OES_texture_float_linear")) {
+	alert("Your browser won't work; I need OES_texture_float_linear in WebGL.");
+	console.log("fuck");
+	window.location = "http://get.webgl.org/troubleshooting";
+    }
     var vertexPosBuffer = screenQuad(gl);
+
+    var palettesize = 6;
+    var palette_dataf = new Float32Array([1.0, 0.0, 0.0, 1.0,
+					  1.0, 1.0, 0.0, 1.0,
+					  0.0, 1.0, 0.0, 1.0,
+					  0.0, 1.0, 1.0, 1.0,
+					  0.0, 0.0, 1.0, 1.0,
+					  1.0, 0.0, 1.0, 1.0]);
+    // 1.0, 0.0, 0.0, 1.0]);
+    // var palette_dataf = create_palette(palettesize);
 
     var vs = document.getElementById('vshader').textContent;
     var fs = document.getElementById('fshader').textContent;
     var program = createProgram(vs,fs);
     gl.useProgram(program);
+    gl.bindAttribLocation(program, 0, 'aVertexPosition');
     program.vertexPosAttrib = gl.getAttribLocation(program, 'aVertexPosition');
     program.freq = gl.getUniformLocation(program, 'freq');
     program.res = gl.getUniformLocation(program, 'res');
@@ -235,15 +329,18 @@ if (!window.WebGLRenderingContext) {
     program.pow = gl.getUniformLocation(program, 'pow');
     program.speed = gl.getUniformLocation(program, 'speed');
     program.phase = gl.getUniformLocation(program, 'phase');
-    program.num_waves = gl.getUniformLocation(program, 'num_waves');
-    gl.enableVertexAttribArray(program.vertexPosArray);
+    program.palette = gl.getUniformLocation(program, 'palette');
+    program.coloring = gl.getUniformLocation(program, 'coloring');
     gl.vertexAttribPointer(program.vertexPosAttrib, vertexPosBuffer.itemSize, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(0);
 
     var prec = 1;
     var pow = 0;
     var dt = 1.0;
     var olddt = 0.0;
     var t = 0;
+    var ncolors = 3;
+    var coloring = 0;
     var freq = 1.0;
     var n = 8;
     var x = 0.0;
@@ -253,24 +350,24 @@ if (!window.WebGLRenderingContext) {
     var rspeed = 1.0;
     var gspeed = 1.0;
     var bspeed = 1.0;
-    var rphase = 1.0;
-    var gphase = 1.0;
-    var bphase = 1.0;
+    var rphase = 0.0;
+    var gphase = 2.0*kPi/3.0;
+    var bphase = 4.0*kPi/3.0;
 
     var helpTimer;
     var helpShown = false;
     function toggleHelp() {
         if (helpTimer) clearTimeout(helpTimer);
         if (helpShown) {
-            helpShown = false;
-            $("#help").hide();
+	    helpShown = false;
+	    $("#help").hide();
         } else {
-            $("#help").show();
-            helpShown = true;
-            helpTimer = setTimeout(function () {
+	    $("#help").show();
+	    helpShown = true;
+	    helpTimer = setTimeout(function () {
                 $("#help").fadeOut(1000);
                 helpShown = false;
-            }, 4000);
+	    }, 4000);
         }
     }
 
@@ -303,6 +400,8 @@ if (!window.WebGLRenderingContext) {
 		 e.which == 'V'.charCodeAt(0)) bphase -= 0.1;
 	else if (e.which == 'n'.charCodeAt(0) ||
 		 e.which == 'N'.charCodeAt(0)) bphase += 0.1;
+	else if (e.which == 'c'.charCodeAt(0)) coloring = (coloring + 1) % ncolors;
+	else if (e.which == 'C'.charCodeAt(0)) coloring = (coloring - 1) % ncolors;
 	else if (e.which == '?'.charCodeAt(0)) toggleHelp();
 	else if (e.which == '/'.charCodeAt(0)) toggleHelp();
 	else if (e.which == ' '.charCodeAt(0)) {
@@ -339,6 +438,12 @@ if (!window.WebGLRenderingContext) {
     $(window).on('load', setsize);
 
     function draw() {
+	// Color palette is supplied as a texture
+	var textureUnit = 15;
+	gl.activeTexture(gl.TEXTURE0 + textureUnit);
+	var palette_texture = textureFromFloats(gl, palettesize, 1, palette_dataf);
+	gl.bindTexture(gl.TEXTURE_2D, palette_texture);
+
 	var f32 = new Float32Array(1);
 	f32[0] = freq;
 	gl.uniform2f(program.freq, freq, freq-f32[0]);
@@ -349,6 +454,8 @@ if (!window.WebGLRenderingContext) {
 	gl.uniform2f(program.center, x, y);
 	gl.uniform3f(program.speed, rspeed, gspeed, bspeed);
 	gl.uniform3f(program.phase, rphase, gphase, bphase);
+	gl.uniform1i(program.palette, textureUnit);
+	gl.uniform1i(program.coloring, coloring);
 	gl.drawArrays(gl.TRIANGLE_STRIP, 0, vertexPosBuffer.numItems);
     }
 
