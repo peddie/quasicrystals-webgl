@@ -45,6 +45,7 @@
     uniform float ck;
     uniform float co;
     uniform vec2 res;
+    uniform vec4 bins;
 
     vec4 waves() {
     float x = gl_FragCoord.x - 0.5 * res.x;
@@ -52,6 +53,8 @@
 
     float coses[kMaxNumWaves];
     float sines[kMaxNumWaves];
+
+    float power = sqrt(bins.x*bins.x + bins.y*bins.y + bins.z*bins.z + bins.w*bins.w);
 
     for (int i = 0; i < kMaxNumWaves; ++i) {
                         float angle = float(i) * kPi / float(num_waves);
@@ -67,7 +70,7 @@
                                             float sy = sines[w] * y;
                                             // vec4 phase_vec = texture1D(phases, (float(w) + 0.5) / float(kMaxNumWaves));
                                             float phase = t * 0.01 * float(w);
-                                            p += 0.5 * (cos(freq * (cx + sy) + phase) + 1.0);
+                                            p += 0.5 * (cos(freq * (cx + sy) + phase + power*power) + 1.0);
                                             if (w == num_waves) break;
                                             }
 
@@ -77,7 +80,7 @@
                                             float gg = cos(ga) * cc + sin(ga) * ss;
                                             float bb = cos(ba) * cc + sin(ba) * ss;
                                             float r = ck * 0.5 * rr + co;
-                                            float g = ck * 0.5 * gg + co;
+                                            float g = ck * 0.5 * gg + co - bins.x * bins.z;
                                             float b = ck * 0.5 * bb + co;
 
                                             return vec4(r, g, b, 1.0);
@@ -87,6 +90,7 @@
                                             gl_FragColor = waves();
                                             }
                                             </script>
+  <script src="sound.js"></script>
   <script>
     kPi = 3.1415926535;
     //return an obect with the dimension of the viewport of the browser
@@ -115,6 +119,7 @@
     program.ba = gl.getUniformLocation(program, 'ba');
     program.ck = gl.getUniformLocation(program, 'ck');
     program.co = gl.getUniformLocation(program, 'co');
+    program.bins = gl.getUniformLocation(program, 'bins');
     program.num_waves = gl.getUniformLocation(program, 'num_waves');
     gl.enableVertexAttribArray(program.vertexPosArray);
     gl.vertexAttribPointer(program.vertexPosAttrib, vertexPosBuffer.itemSize, gl.FLOAT, false, 0, 0);
@@ -128,6 +133,14 @@
     var ba = 0.5 * kPi;
     var ck = 1.6;
     var co = 0.7;
+
+    var bins = [ 0, 0, 0, 0 ];
+
+    try {
+        audio_setup();
+    } catch (e) {
+        console.error('Javascript is a dick: ', e);
+    }
 
     var helpTimer;
     var helpShown = false;
@@ -180,6 +193,26 @@
     $(window).on('resize', setsize);
     $(window).on('load', setsize);
 
+    function calc_bin(offset, idx, count) {
+	newbin = 0;
+	for (i = offset; i < offset + count; i++)
+	    newbin += freqarr[i];
+	newbin = newbin / (count * 255);
+	bins[idx] = newbin; // bins[idx] * 0.8 + newbin * 0.2;
+    }
+    function calc_bins() {
+	if (analyser) {
+	    analyser.getByteFrequencyData(freqarr);
+	    // calc_bin(0, 0, 10);
+	    // calc_bin(10, 1, 12);
+	    // calc_bin(22, 2, 26);
+	    // calc_bin(48, 3, 972);
+	    calc_bin(0, 0, 5);
+	    calc_bin(5, 1, 6);
+	    calc_bin(11, 2, 13);
+	    calc_bin(24, 3, 488);
+	}
+    }
     function draw() {
     gl.uniform1f(program.freq, freq);
     gl.uniform1f(program.t, t);
@@ -189,6 +222,8 @@
     gl.uniform1f(program.ba, ba);
     gl.uniform1f(program.ck, ck);
     gl.uniform1f(program.co, co);
+    calc_bins();
+    gl.uniform4f(program.bins, bins[0], bins[1], bins[2], bins[3]);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, vertexPosBuffer.numItems);
     }
 
