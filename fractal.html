@@ -12,14 +12,14 @@
     - and =                change zoom<br>
     p (P)                  switch to single (double) precision (slow!)<br>
     ?                      display this help message<br>
-    r and R 		   change red speed<br>
-    g and G 		   change green speed<br>
-    b and B 		   change blue speed<br>
-    e and t 		   change red phase<br>
-    f and h 		   change green phase<br>
-    v and n 		   change blue phase<br>
-    [ and ] 		   change exponent<br>
-    c 	  		   cycle color scheme<br>
+    r and R                change red maximum<br>
+    g and G                change green maximum<br>
+    b and B                change blue maximum<br>
+    e and t                change red minimum<br>
+    f and h                change green minimum<br>
+    v and n                change blue minimum<br>
+    { and }                change exponent<br>
+    c                      cycle color scheme<br>
     </div>
     <script src='webgl-utils.js'></script>
     <script id='vshader' type='x-shader'>
@@ -52,6 +52,7 @@ uniform vec3 speed;
 uniform vec3 phase;
 uniform sampler2D palette;
 uniform int coloring;
+uniform vec4 bins;
 
 vec4 colormap(int cap, int iters) {
     float capfl = float(cap);
@@ -67,24 +68,25 @@ vec4 colormap(int cap, int iters) {
 }
 
 vec4 bettermap(int cap, int iters, float x, float y) {
+    float power = sqrt(bins.x*bins.x + bins.y*bins.y + bins.z*bins.z + bins.w*bins.w);
     float capfl = float(cap);
     float ifl = float(iters);
     if (coloring == 2 && iters < cap) {
-    	// sqrt of inner term removed using log simplification rules.
-    	float log_zn = log(x*x + y*y) / 2.0;
-    	float nu = log(log_zn / log(2.0)) / log(2.0);
-    	// Rearranging the potential function.
-    	// Dividing log_zn by log(2) instead of log(N = 1<<8)
-    	// because we want the entire palette to range from the
-    	// center to radius 2, NOT our bailout radius.
-    	ifl = ifl + 1.0 - nu;
+        // sqrt of inner term removed using log simplification rules.
+        float log_zn = log(x*x + y*y) / 2.0;
+        float nu = log(log_zn / log(2.0)) / log(2.0);
+        // Rearranging the potential function.
+        // Dividing log_zn by log(2) instead of log(N = 1<<8)
+        // because we want the entire palette to range from the
+        // center to radius 2, NOT our bailout radius.
+        ifl = (ifl + 1.0 - nu) / (3.1415926535 * 2.0);
     } else if (coloring == 1) {
-	ifl = log(ifl);
+        ifl = log(ifl);
     } else if (coloring == 0) {
-	ifl = log(ifl) - log(capfl);
+        ifl = log(ifl) - log(capfl);
     }
 
-    float map = 0.5 + sin(ifl + t / 256.0) * 0.5;
+    float map = 0.5 + sin(ifl + bins.y*bins.y + bins.z*bins.z + t / 256.0) * 0.5;
     return texture2D(palette, vec2(map, 0.0));
 }
 
@@ -95,28 +97,28 @@ vec4 iterate() {
     float x0 = (freq.x * (gl_FragCoord.x / res.x - 0.5) + center.x) * (3.5 / 2.0);
     float y0 = freq.x * (gl_FragCoord.y / res.y - 0.5) + center.y;
 
-    const int cap = 100;
+    const int cap = 200;
     int iter = 0;
 
     for (int i = 0; i < cap; i++) {
-	iter = i;
-	float xsq = x*x;
-	float ysq = y*y;
-	if (xsq + ysq > 4.0) {
+        iter = i;
+        float xsq = x*x;
+        float ysq = y*y;
+        if (xsq + ysq > 4.0) {
             break;
-	}
-	float xtemp;
-	if (pow == 4) {
-	    xtemp = xsq*xsq + ysq*ysq - 6.0*xsq*ysq + x0;
-	    y = 4.0*x*y*(xsq - ysq) + y0;
-	} else if (pow == 3) {
-	    xtemp = xsq*x - 3.0*x*ysq + x0;
-	    y = 3.0*xsq*y - ysq*y + y0;
-	} else {
-	    xtemp = xsq - ysq + x0;
-	    y = 2.0*x*y + y0;
-	}
-	x = xtemp;
+        }
+        float xtemp;
+        if (pow == 4) {
+            xtemp = xsq*xsq + ysq*ysq - 6.0*xsq*ysq + x0;
+            y = 4.0*x*y*(xsq - ysq) + y0;
+        } else if (pow == 3) {
+            xtemp = xsq*x - 3.0*x*ysq + x0;
+            y = 3.0*xsq*y - ysq*y + y0;
+        } else {
+            xtemp = xsq - ysq + x0;
+            y = 2.0*x*y + y0;
+        }
+        x = xtemp;
     }
 
     return bettermap(cap, iter, x, y);
@@ -179,11 +181,11 @@ vec2 ds_mul(vec2 dsa, vec2 dsb) {
 
 bool ds_gt(vec2 dsa, vec2 dsb) {
     if (dsa.x > dsb.x) {
-	return true;
+        return true;
     } else if (dsa.x < dsb.x) {
-    	return false;
+        return false;
     } else if (dsa.y > dsb.y) {
-	return true;
+        return true;
     }
     return false;
 }
@@ -195,31 +197,31 @@ vec4 iterate_double() {
     y = vec2(0.0, 0.0);
 
     vec2 x0 = ds_mul(ds_add(ds_mul(freq,
-				   ds_add(ds_mul(ds_set(gl_FragCoord.x),
-						 ds_set(1.0/res.x)),
-					  ds_set(-0.5))),
-			    ds_set(center.x)),
-		     ds_mul(ds_set(3.5), ds_set(0.5)));
+                                   ds_add(ds_mul(ds_set(gl_FragCoord.x),
+                                                 ds_set(1.0/res.x)),
+                                          ds_set(-0.5))),
+                            ds_set(center.x)),
+                     ds_mul(ds_set(3.5), ds_set(0.5)));
     vec2 y0 = ds_add(ds_mul(freq,
-			    ds_add(ds_mul(ds_set(gl_FragCoord.y),
-					  ds_set(1.0/res.y)),
-				   ds_set(-0.5))),
-		     ds_set(center.y));
+                            ds_add(ds_mul(ds_set(gl_FragCoord.y),
+                                          ds_set(1.0/res.y)),
+                                   ds_set(-0.5))),
+                     ds_set(center.y));
 
     const int cap = 1000;
     int iter = 0;
 
     for (int i = 0; i < cap; i++) {
-	iter = i;
-	vec2 xsq = ds_mul(x, x);
-	vec2 ysq = ds_mul(y, y);
-	vec2 sqr = ds_add(xsq, ysq);
-	if (ds_gt(sqr, ds_set(4.0))) {
-	    break;
-	}
-	vec2 xtemp = ds_add(ds_sub(xsq, ysq), x0);
-	y = ds_add(ds_mul(ds_mul(ds_set(2.0),x),y),y0);
-	x = xtemp;
+        iter = i;
+        vec2 xsq = ds_mul(x, x);
+        vec2 ysq = ds_mul(y, y);
+        vec2 sqr = ds_add(xsq, ysq);
+        if (ds_gt(sqr, ds_set(4.0))) {
+            break;
+        }
+        vec2 xtemp = ds_add(ds_sub(xsq, ysq), x0);
+        y = ds_add(ds_mul(ds_mul(ds_set(2.0),x),y),y0);
+        x = xtemp;
     }
 
     return colormap(cap, iter);
@@ -227,41 +229,101 @@ vec4 iterate_double() {
 
 void main() {
     if (prec != 1) {
-	gl_FragColor = iterate_double();
+        gl_FragColor = iterate_double();
     } else {
-	gl_FragColor = iterate();
+        gl_FragColor = iterate();
     }
 }
 </script>
     <script>
-    kPi = 3.1415926535;
+var kPi = 3.1415926535;
+var audioContext = null;
+var meter = null;
+var canvasContext = null;
+var analyser = null;
+var freqarr = null;
+var mediaStreamSource = null;
+function audio_setup() {
+    // monkeypatch Web Audio
+    window.AudioContext = window.AudioContext || window.webkitAudioContext;
+    // grab an audio context
+    audioContext = new AudioContext();
+
+    // Attempt to get audio input
+    try {
+        // monkeypatch getUserMedia
+        navigator.getUserMedia =
+            navigator.mediaDevices.getUserMedia ||
+            navigator.webkitGetUserMedia ||
+            navigator.mozGetUserMedia;
+
+        // ask for an audio input
+        navigator.getUserMedia({
+                "audio": {
+                    "mandatory": {
+                     "googEchoCancellation": "false",
+                     "googAutoGainControl": "false",
+                     "googNoiseSuppression": "false",
+                     "googHighpassFilter": "false"
+                    },
+                    "optional": []
+                },
+            }, gotStream, didntGetStream);
+    } catch (e) {
+        alert('getUserMedia threw exception: ' + e);
+    }
+}
+function didntGetStream() {
+    console.error('Stream generation failed.');
+}
+function gotStream(stream) {
+    // Create an AnalyserNode from the stream.
+    console.log('Got a stream.');
+    mediaStreamSource = audioContext.createMediaStreamSource(stream);
+
+    analyser = audioContext.createAnalyser();
+    analyser.smoothingTimeConstant = 0.6;
+    analyser.fftSize = 1024;
+    mediaStreamSource.connect(analyser);
+    freqarr = new Uint8Array(analyser.frequencyBinCount);
+    console.log('Finished setting up audio stuff.');
+}
 function create_palette(palettesize) {
     var palette_data = new Float32Array(palettesize * 4);
     for (i = 0; i < palettesize; i++) {
-	// Fill in RGBA array.
-	palette_data[4*i] = 0.5 + Math.sin(kPi/2.0 * i / palettesize) / 2.0;
-	palette_data[4*i + 1] = 0.5 + Math.sin(kPi/2.0 * i / palettesize + 2.0*kPi / 3.0) / 2.0;
-	palette_data[4*i + 2] = 0.5 + Math.sin(kPi/2.0 * i / palettesize + 4.0*kPi / 3.0) / 2.0;
-	palette_data[4*i + 3] = 1.0;
+        // Fill in RGBA array.
+        palette_data[4*i] = 0.5 + Math.sin(kPi/2.0 * i / palettesize) / 2.0;
+        palette_data[4*i + 1] = 0.5 + Math.sin(kPi/2.0 * i / palettesize + 2.0*kPi / 3.0) / 2.0;
+        palette_data[4*i + 2] = 0.5 + Math.sin(kPi/2.0 * i / palettesize + 4.0*kPi / 3.0) / 2.0;
+        palette_data[4*i + 3] = 1.0;
     }
 
     return palette_data;
+};
+function create_rainbow(rmin, rmax, gmin, gmax, bmin, bmax) {
+    var palette_dataf = new Float32Array([rmax, gmin, bmin, 1.0,
+                                          rmax, gmax, bmin, 1.0,
+                                          rmin, gmax, bmin, 1.0,
+                                          rmin, gmax, bmax, 1.0,
+                                          rmin, gmin, bmax, 1.0,
+                                          rmax, gmin, bmax, 1.0]);
+    return palette_dataf;
 };
 function isPowerOf2(value) {
     return (value & (value - 1)) == 0;
 };
 function setupTextureFilteringAndMips(width, height) {
     if (isPowerOf2(width) && isPowerOf2(height)) {
-	// the dimensions are power of 2 so generate mips and turn on
-	// tri-linear filtering.
-	gl.generateMipmap(gl.TEXTURE_2D);
-	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+        // the dimensions are power of 2 so generate mips and turn on
+        // tri-linear filtering.
+        gl.generateMipmap(gl.TEXTURE_2D);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
     } else {
-	// at least one of the dimensions is not a power of 2 so set the filtering
-	// so WebGL will render it.
-	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        // at least one of the dimensions is not a power of 2 so set the filtering
+        // so WebGL will render it.
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     }
 };
 function textureFromFloats(gl,width,height,float32Array) {
@@ -291,17 +353,17 @@ if (!window.WebGLRenderingContext) {
     var c = document.getElementById('c');
     var gl = c.getContext('experimental-webgl');
     if (!gl) {
-	alert("Your browser won't work; I need WebGL!")
-	window.location = "http://get.webgl.org/troubleshooting";
+        alert("Your browser won't work; I need WebGL!")
+        window.location = "http://get.webgl.org/troubleshooting";
     }
     if (!gl.getExtension("OES_texture_float")) {
-	alert("Your browser won't work; I need OES_texture_float in WebGL.");
-	window.location = "http://get.webgl.org/troubleshooting";
+        alert("Your browser won't work; I need OES_texture_float in WebGL.");
+        window.location = "http://get.webgl.org/troubleshooting";
     }
     if (!gl.getExtension("OES_texture_float_linear")) {
-	alert("Your browser won't work; I need OES_texture_float_linear in WebGL.");
-	console.log("fuck");
-	window.location = "http://get.webgl.org/troubleshooting";
+        alert("Your browser won't work; I need OES_texture_float_linear in WebGL.");
+        console.log("fuck");
+        window.location = "http://get.webgl.org/troubleshooting";
     }
     var vertexPosBuffer = screenQuad(gl);
 
@@ -331,6 +393,7 @@ if (!window.WebGLRenderingContext) {
     program.phase = gl.getUniformLocation(program, 'phase');
     program.palette = gl.getUniformLocation(program, 'palette');
     program.coloring = gl.getUniformLocation(program, 'coloring');
+    program.bins = gl.getUniformLocation(program, 'bins');
     gl.vertexAttribPointer(program.vertexPosAttrib, vertexPosBuffer.itemSize, gl.FLOAT, false, 0, 0);
     gl.enableVertexAttribArray(0);
 
@@ -347,126 +410,159 @@ if (!window.WebGLRenderingContext) {
     var x_ = 0.0;
     var y = 0.0;
     var y_ = 0.0;
-    var rspeed = 1.0;
-    var gspeed = 1.0;
-    var bspeed = 1.0;
-    var rphase = 0.0;
-    var gphase = 2.0*kPi/3.0;
-    var bphase = 4.0*kPi/3.0;
+    var rmin = 0.0;
+    var gmin = 0.0;
+    var bmin = 0.0;
+    var rmax = 1.0;
+    var gmax = 1.0;
+    var bmax = 1.0;
+
+    var bins = [ 0, 0, 0, 0 ];
+
+    try {
+        audio_setup();
+    } catch (e) {
+        console.error('Javascript is a dick: ', e);
+    }
+
+    var palette_dataf = create_rainbow(rmin, rmax, gmin, gmax, bmin, bmax);
 
     var helpTimer;
     var helpShown = false;
     function toggleHelp() {
         if (helpTimer) clearTimeout(helpTimer);
         if (helpShown) {
-	    helpShown = false;
-	    $("#help").hide();
+            helpShown = false;
+            $("#help").hide();
         } else {
-	    $("#help").show();
-	    helpShown = true;
-	    helpTimer = setTimeout(function () {
+            $("#help").show();
+            helpShown = true;
+            helpTimer = setTimeout(function () {
                 $("#help").fadeOut(1000);
                 helpShown = false;
-	    }, 4000);
+            }, 4000);
         }
     }
 
     function keyhandler(e) {
-	if (e.which == ','.charCodeAt(0)) dt = dt - 0.1;
-	else if (e.which == '.'.charCodeAt(0)) dt = dt + 0.1;
-	else if (e.which == '-'.charCodeAt(0)) freq = freq*1.1;
-	else if (e.which == '_'.charCodeAt(0)) freq = freq*1.1;
-	else if (e.which == ']'.charCodeAt(0)) pow = (pow + 1) % 3;
-	else if (e.which == '['.charCodeAt(0)) pow = (pow - 1) % 3;
-	else if (e.which == '='.charCodeAt(0)) freq = freq*0.909;
-	else if (e.which == '+'.charCodeAt(0)) freq = freq*0.909;
-	else if (e.which == 'p'.charCodeAt(0)) prec = 1;
-	else if (e.which == 'P'.charCodeAt(0)) prec = 2;
-	else if (e.which == 'r'.charCodeAt(0)) rspeed *= 1.05;
-	else if (e.which == 'R'.charCodeAt(0)) rspeed /= 0.95;
-	else if (e.which == 'g'.charCodeAt(0)) gspeed *= 1.05;
-	else if (e.which == 'G'.charCodeAt(0)) gspeed /= 0.95;
-	else if (e.which == 'b'.charCodeAt(0)) bspeed *= 1.05;
-	else if (e.which == 'B'.charCodeAt(0)) bspeed /= 0.95;
-	else if (e.which == 'e'.charCodeAt(0) ||
-		 e.which == 'E'.charCodeAt(0)) rphase -= 0.1;
-	else if (e.which == 't'.charCodeAt(0) ||
-		 e.which == 'T'.charCodeAt(0)) rphase += 0.1;
-	else if (e.which == 'f'.charCodeAt(0) ||
-		 e.which == 'F'.charCodeAt(0)) gphase -= 0.1;
-	else if (e.which == 'h'.charCodeAt(0) ||
-		 e.which == 'H'.charCodeAt(0)) gphase += 0.1;
-	else if (e.which == 'v'.charCodeAt(0) ||
-		 e.which == 'V'.charCodeAt(0)) bphase -= 0.1;
-	else if (e.which == 'n'.charCodeAt(0) ||
-		 e.which == 'N'.charCodeAt(0)) bphase += 0.1;
-	else if (e.which == 'c'.charCodeAt(0)) coloring = (coloring + 1) % ncolors;
-	else if (e.which == 'C'.charCodeAt(0)) coloring = (coloring - 1) % ncolors;
-	else if (e.which == '?'.charCodeAt(0)) toggleHelp();
-	else if (e.which == '/'.charCodeAt(0)) toggleHelp();
-	else if (e.which == ' '.charCodeAt(0)) {
-	    if (olddt == 0.0) {
-		olddt = dt; dt = 0.0;
-	    } else {
-		dt = olddt; olddt = 0.0;
-	    }
-	}
-	console.log(dt, freq, x, y, e.which, e.keyCode);
+        if (e.which == ','.charCodeAt(0)) dt = dt - 0.1;
+        else if (e.which == '.'.charCodeAt(0)) dt = dt + 0.1;
+        else if (e.which == '-'.charCodeAt(0)) freq = freq*1.1;
+        else if (e.which == '_'.charCodeAt(0)) freq = freq*1.1;
+        else if (e.which == ']'.charCodeAt(0)) pow = (pow + 1) % 3;
+        else if (e.which == '['.charCodeAt(0)) pow = (pow - 1) % 3;
+        else if (e.which == '}'.charCodeAt(0)) pow = (pow + 1) % 3;
+        else if (e.which == '{'.charCodeAt(0)) pow = (pow - 1) % 3;
+        else if (e.which == '='.charCodeAt(0)) freq = freq*0.909;
+        else if (e.which == '+'.charCodeAt(0)) freq = freq*0.909;
+        else if (e.which == 'p'.charCodeAt(0)) prec = 1;
+        else if (e.which == 'P'.charCodeAt(0)) prec = 2;
+        else if (e.which == 'r'.charCodeAt(0)) { rmax -= 0.05; if (rmax < rmin) rmax = rmin; }
+        else if (e.which == 'R'.charCodeAt(0)) { rmax += 0.05; if (rmax > 1.0) rmax = 1.0; }
+        else if (e.which == 'g'.charCodeAt(0)) { gmax -= 0.05; if (gmax < gmin) gmax = gmin; }
+        else if (e.which == 'G'.charCodeAt(0)) { gmax += 0.05; if (gmax > 1.0) gmax = 1.0; }
+        else if (e.which == 'b'.charCodeAt(0)) { bmax -= 0.05; if (bmax < bmin) bmax = bmin; }
+        else if (e.which == 'B'.charCodeAt(0)) { bmax += 0.05; if (bmax > 1.0) bmax = 1.0; }
+        else if (e.which == 'e'.charCodeAt(0) ||
+                 e.which == 'E'.charCodeAt(0)) { rmin -= 0.05; if (rmin < 0.0) rmin = 0.0; }
+        else if (e.which == 't'.charCodeAt(0) ||
+                 e.which == 'T'.charCodeAt(0)) { rmin += 0.05; if (rmin > rmax) rmin = rmax; }
+        else if (e.which == 'f'.charCodeAt(0) ||
+                 e.which == 'F'.charCodeAt(0)) { gmin -= 0.05; if (gmin < 0.0) gmin = 0.0; }
+        else if (e.which == 'h'.charCodeAt(0) ||
+                 e.which == 'H'.charCodeAt(0)) { gmin += 0.05; if (gmin > gmax) gmin = gmax; }
+        else if (e.which == 'v'.charCodeAt(0) ||
+                 e.which == 'V'.charCodeAt(0)) { bmin -= 0.05; if (bmin < 0.0) bmin = 0.0; }
+        else if (e.which == 'n'.charCodeAt(0) ||
+                 e.which == 'N'.charCodeAt(0)) { bmin += 0.05; if (bmin > bmax) bmin = bmax; }
+        else if (e.which == 'c'.charCodeAt(0)) coloring = (coloring + 1) % ncolors;
+        else if (e.which == 'C'.charCodeAt(0)) coloring = (coloring - 1) % ncolors;
+        else if (e.which == '?'.charCodeAt(0)) toggleHelp();
+        else if (e.which == '/'.charCodeAt(0)) toggleHelp();
+        else if (e.which == ' '.charCodeAt(0)) {
+            if (olddt == 0.0) {
+                olddt = dt; dt = 0.0;
+            } else {
+                dt = olddt; olddt = 0.0;
+            }
+        }
+        console.log(dt, freq, x, y, e.which, e.keyCode);
     };
 
     function arrowhandler(e) {
-	if (e.which == 37) x -= 0.1 * freq;
-	else if (e.which == 38) y += 0.1 * freq;
-	else if (e.which == 39) x += 0.1 * freq;
-	else if (e.which == 40) y -= 0.1 * freq;
-	else if (e.which == 33) { x = 0; y = 0; }
-	else if (e.which == 34) { x = 0; y = 0; freq = 1.0; }
-	console.log(dt, freq, x, y, e.which, e.keyCode);
+        if (e.which == 37) x -= 0.1 * freq;
+        else if (e.which == 38) y += 0.1 * freq;
+        else if (e.which == 39) x += 0.1 * freq;
+        else if (e.which == 40) y -= 0.1 * freq;
+        else if (e.which == 33) { x = 0; y = 0; }
+        else if (e.which == 34) { x = 0; y = 0; freq = 1.0; }
+        console.log(dt, freq, x, y, e.which, e.keyCode);
     };
     document.onkeypress = keyhandler;
     document.onkeydown = arrowhandler;
 
     // Thanks, Erika!
     function setsize() {
-	c.width = $(window).width();
-	c.height = $(window).height();
-	gl.uniform2f(program.res, c.width, c.height);
-	gl.viewport(0, 0, c.width, c.height);
+        c.width = $(window).width();
+        c.height = $(window).height();
+        gl.uniform2f(program.res, c.width, c.height);
+        gl.viewport(0, 0, c.width, c.height);
     };
 
     $(window).on('resize', setsize);
     $(window).on('load', setsize);
 
+    function calc_bin(offset, idx, count) {
+	newbin = 0;
+	for (i = offset; i < offset + count; i++)
+	    newbin += freqarr[i];
+	newbin = newbin / (count * 255);
+	bins[idx] = newbin; // bins[idx] * 0.8 + newbin * 0.2;
+    }
+    function calc_bins() {
+	if (analyser) {
+	    analyser.getByteFrequencyData(freqarr);
+	    // calc_bin(0, 0, 10);
+	    // calc_bin(10, 1, 12);
+	    // calc_bin(22, 2, 26);
+	    // calc_bin(48, 3, 972);
+	    calc_bin(0, 0, 5);
+	    calc_bin(5, 1, 6);
+	    calc_bin(11, 2, 13);
+	    calc_bin(24, 3, 488);
+	}
+    }
     function draw() {
-	// Color palette is supplied as a texture
-	var textureUnit = 15;
-	gl.activeTexture(gl.TEXTURE0 + textureUnit);
-	var palette_texture = textureFromFloats(gl, palettesize, 1, palette_dataf);
-	gl.bindTexture(gl.TEXTURE_2D, palette_texture);
+        // Color palette is supplied as a texture
+        var textureUnit = 15;
+        var palette_data = create_rainbow(rmin, rmax, gmin, gmax, bmin, bmax);
+        gl.activeTexture(gl.TEXTURE0 + textureUnit);
+        var palette_texture = textureFromFloats(gl, palettesize, 1, palette_data);
+        gl.bindTexture(gl.TEXTURE_2D, palette_texture);
 
-	var f32 = new Float32Array(1);
-	f32[0] = freq;
-	gl.uniform2f(program.freq, freq, freq-f32[0]);
-	gl.uniform1f(program.t, t);
-	gl.uniform1i(program.num_waves, n);
-	gl.uniform1i(program.prec, prec);
-	gl.uniform1i(program.pow, pow + 2);
-	gl.uniform2f(program.center, x, y);
-	gl.uniform3f(program.speed, rspeed, gspeed, bspeed);
-	gl.uniform3f(program.phase, rphase, gphase, bphase);
-	gl.uniform1i(program.palette, textureUnit);
-	gl.uniform1i(program.coloring, coloring);
-	gl.drawArrays(gl.TRIANGLE_STRIP, 0, vertexPosBuffer.numItems);
+        var f32 = new Float32Array(1);
+        f32[0] = freq;
+        gl.uniform2f(program.freq, freq, freq-f32[0]);
+        gl.uniform1f(program.t, t);
+        gl.uniform1i(program.num_waves, n);
+        gl.uniform1i(program.prec, prec);
+        gl.uniform1i(program.pow, pow + 2);
+        gl.uniform2f(program.center, x, y);
+        gl.uniform1i(program.palette, textureUnit);
+        gl.uniform1i(program.coloring, coloring);
+        calc_bins();
+        gl.uniform4f(program.bins, bins[0], bins[1], bins[2], bins[3]);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, vertexPosBuffer.numItems);
     }
 
     function animate() {
-	t += dt;
+        t += dt;
     }
 
     function drawFrame() {
-	requestAnimationFrame(drawFrame);
-	draw();
-	animate();
+        requestAnimationFrame(drawFrame);
+        draw();
+        animate();
     }
 
     drawFrame();
