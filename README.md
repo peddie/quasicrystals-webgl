@@ -6,7 +6,7 @@ Have fun playing with these trippy visualizations.
 Quasicrystals
 ---------
 
-    /index.html
+[`/index.html`](https://peddie.github.io/quasicrystals-webgl/index.html)
 
 Press `?` for a help message and information on keybindings.
 
@@ -22,11 +22,14 @@ it off.
 Mandelbrot
 ---------
 
-    /fractal.html
+[`/fractal.html`](https://peddie.github.io/quasicrystals-webgl/fractal.html)
 
 Press `?` for a help message and information on keybindings.
 
-The sound integration on this one is better.
+The sound integration on this one is better.  I get better results
+with music when I set Pulseaudio to the "monitor" input, i.e. only the
+music that's playing, without any mic; I encourage you to do the same
+if your audio system can.
 
 If you get bored, try changing color schemes with `c` or fractal power
 with `]`.
