@@ -8,18 +8,22 @@
     <div id="helpButton">?</div>
     <div id="help"><h2>Mandelbrot visualization -- divergence and stability</h2><br>
     <h3>Keybindings:</h3><br>
-    up, left, down, right  navigate<br>
-    - and =                change zoom<br>
-    p (P)                  switch to single (double) precision (slow!)<br>
     ?                      display this help message<br>
-    r and R                change red maximum<br>
-    g and G                change green maximum<br>
-    b and B                change blue maximum<br>
-    e and t                change red minimum<br>
-    f and h                change green minimum<br>
-    v and n                change blue minimum<br>
+    up, left, down, right  pan<br>
+    - and =                zoom<br>
+    p (P)                  switch to single (double) precision (slow, experimental)<br>
     { and }                change exponent<br>
-    c                      cycle color scheme<br>
+    c                      cycle color scheme<br><br>
+    <h4>Color channel controls:</h4>
+    e and E                change red minimum<br>
+    t and T                change red maximum<br>
+    r and R 		   change red phase<br><br>
+    f and F                change green minimum<br>
+    h and H                change green maximum<br>
+    g and G 		   change green phase<br><br>
+    v and V                change blue minimum<br>
+    n and N                change blue maximum<br>
+    b and B 		   change blue phase<br>
     </div>
     <script src='webgl-utils.js'></script>
     <script id='vshader' type='x-shader'>
@@ -394,29 +398,29 @@ if (!window.WebGLRenderingContext) {
         else if (e.which == '+'.charCodeAt(0)) freq = freq*0.909;
         else if (e.which == 'p'.charCodeAt(0)) prec = 1;
         else if (e.which == 'P'.charCodeAt(0)) prec = 2;
-        else if (e.which == 'r'.charCodeAt(0)) { rmax -= 0.05; if (rmax < rmin) rmax = rmin; }
-        else if (e.which == 'R'.charCodeAt(0)) { rmax += 0.05; if (rmax > 1.0) rmax = 1.0; }
-        else if (e.which == 'g'.charCodeAt(0)) { gmax -= 0.05; if (gmax < gmin) gmax = gmin; }
-        else if (e.which == 'G'.charCodeAt(0)) { gmax += 0.05; if (gmax > 1.0) gmax = 1.0; }
-        else if (e.which == 'b'.charCodeAt(0)) { bmax -= 0.05; if (bmax < bmin) bmax = bmin; }
-        else if (e.which == 'B'.charCodeAt(0)) { bmax += 0.05; if (bmax > 1.0) bmax = 1.0; }
+        else if (e.which == 't'.charCodeAt(0)) { rmax -= 0.05; if (rmax < rmin) rmax = rmin; }
+        else if (e.which == 'T'.charCodeAt(0)) { rmax += 0.05; if (rmax > 1.0) rmax = 1.0; }
+        else if (e.which == 'h'.charCodeAt(0)) { gmax -= 0.05; if (gmax < gmin) gmax = gmin; }
+        else if (e.which == 'H'.charCodeAt(0)) { gmax += 0.05; if (gmax > 1.0) gmax = 1.0; }
+        else if (e.which == 'n'.charCodeAt(0)) { bmax -= 0.05; if (bmax < bmin) bmax = bmin; }
+        else if (e.which == 'N'.charCodeAt(0)) { bmax += 0.05; if (bmax > 1.0) bmax = 1.0; }
         else if (e.which == 'e'.charCodeAt(0)) { rmin -= 0.05; if (rmin < 0.0) rmin = 0.0; }
-        else if (e.which == 't'.charCodeAt(0)) { rmin += 0.05; if (rmin > rmax) rmin = rmax; }
+        else if (e.which == 'E'.charCodeAt(0)) { rmin += 0.05; if (rmin > rmax) rmin = rmax; }
         else if (e.which == 'f'.charCodeAt(0)) { gmin -= 0.05; if (gmin < 0.0) gmin = 0.0; }
-        else if (e.which == 'h'.charCodeAt(0)) { gmin += 0.05; if (gmin > gmax) gmin = gmax; }
+        else if (e.which == 'F'.charCodeAt(0)) { gmin += 0.05; if (gmin > gmax) gmin = gmax; }
         else if (e.which == 'v'.charCodeAt(0)) { bmin -= 0.05; if (bmin < 0.0) bmin = 0.0; }
-        else if (e.which == 'n'.charCodeAt(0)) { bmin += 0.05; if (bmin > bmax) bmin = bmax; }
-        else if (e.which == 'E'.charCodeAt(0))
+        else if (e.which == 'V'.charCodeAt(0)) { bmin += 0.05; if (bmin > bmax) bmin = bmax; }
+        else if (e.which == 'r'.charCodeAt(0))
 	{ rphase -= 0.05; if (rphase < 0.0) rphase = 1.0 - rphase; }
-        else if (e.which == 'T'.charCodeAt(0))
+        else if (e.which == 'R'.charCodeAt(0))
 	{ rphase += 0.05; if (rphase > 1.0) rphase = rphase - 1.0; }
-        else if (e.which == 'F'.charCodeAt(0))
+        else if (e.which == 'g'.charCodeAt(0))
 	{ gphase -= 0.05; if (gphase < 0.0) gphase = 1.0 - gphase; }
-        else if (e.which == 'H'.charCodeAt(0))
+        else if (e.which == 'G'.charCodeAt(0))
 	{ gphase += 0.05; if (gphase > 1.0) gphase = gphase - 1.0; }
-        else if (e.which == 'V'.charCodeAt(0))
+        else if (e.which == 'b'.charCodeAt(0))
 	{ bphase -= 0.05; if (bphase < 0.0) bphase = 1.0 - bphase; }
-        else if (e.which == 'N'.charCodeAt(0))
+        else if (e.which == 'B'.charCodeAt(0))
 	{ bphase += 0.05; if (bphase > 1.0) bphase = bphase - 1.0; }
         else if (e.which == 'c'.charCodeAt(0)) coloring = (coloring + 1) % ncolors;
         else if (e.which == 'C'.charCodeAt(0)) coloring = (coloring - 1) % ncolors;
