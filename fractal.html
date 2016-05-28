@@ -236,29 +236,9 @@ void main() {
 }
 </script>
     <script src="sound.js"></script>
+    <script src="palette.js"></script>
     <script>
 var kPi = 3.1415926535;
-function create_palette(palettesize) {
-    var palette_data = new Float32Array(palettesize * 4);
-    for (i = 0; i < palettesize; i++) {
-        // Fill in RGBA array.
-        palette_data[4*i] = 0.5 + Math.sin(kPi/2.0 * i / palettesize) / 2.0;
-        palette_data[4*i + 1] = 0.5 + Math.sin(kPi/2.0 * i / palettesize + 2.0*kPi / 3.0) / 2.0;
-        palette_data[4*i + 2] = 0.5 + Math.sin(kPi/2.0 * i / palettesize + 4.0*kPi / 3.0) / 2.0;
-        palette_data[4*i + 3] = 1.0;
-    }
-
-    return palette_data;
-};
-function create_rainbow(rmin, rmax, gmin, gmax, bmin, bmax) {
-    var palette_dataf = new Float32Array([rmax, gmin, bmin, 1.0,
-                                          rmax, gmax, bmin, 1.0,
-                                          rmin, gmax, bmin, 1.0,
-                                          rmin, gmax, bmax, 1.0,
-                                          rmin, gmin, bmax, 1.0,
-                                          rmax, gmin, bmax, 1.0]);
-    return palette_dataf;
-};
 function isPowerOf2(value) {
     return (value & (value - 1)) == 0;
 };
@@ -366,6 +346,9 @@ if (!window.WebGLRenderingContext) {
     var rmax = 1.0;
     var gmax = 1.0;
     var bmax = 1.0;
+    var rphase = 0.0;
+    var gphase = 0.0;
+    var bphase = 0.0;
 
     var bins = [ 0, 0, 0, 0 ];
 
@@ -375,7 +358,11 @@ if (!window.WebGLRenderingContext) {
         console.error('Javascript is a dick: ', e);
     }
 
-    var palette_dataf = create_rainbow(rmin, rmax, gmin, gmax, bmin, bmax);
+    // var palette_dataf = create_rainbow(rmin, rmax, gmin, gmax, bmin, bmax);
+    var palette_dataf = create_palette_1d([rmin, gmin, bmin],
+					  [rmax, gmax, bmax],
+					  [rphase, gphase, bphase],
+					  100);
 
     var helpTimer;
     var helpShown = false;
@@ -413,18 +400,24 @@ if (!window.WebGLRenderingContext) {
         else if (e.which == 'G'.charCodeAt(0)) { gmax += 0.05; if (gmax > 1.0) gmax = 1.0; }
         else if (e.which == 'b'.charCodeAt(0)) { bmax -= 0.05; if (bmax < bmin) bmax = bmin; }
         else if (e.which == 'B'.charCodeAt(0)) { bmax += 0.05; if (bmax > 1.0) bmax = 1.0; }
-        else if (e.which == 'e'.charCodeAt(0) ||
-                 e.which == 'E'.charCodeAt(0)) { rmin -= 0.05; if (rmin < 0.0) rmin = 0.0; }
-        else if (e.which == 't'.charCodeAt(0) ||
-                 e.which == 'T'.charCodeAt(0)) { rmin += 0.05; if (rmin > rmax) rmin = rmax; }
-        else if (e.which == 'f'.charCodeAt(0) ||
-                 e.which == 'F'.charCodeAt(0)) { gmin -= 0.05; if (gmin < 0.0) gmin = 0.0; }
-        else if (e.which == 'h'.charCodeAt(0) ||
-                 e.which == 'H'.charCodeAt(0)) { gmin += 0.05; if (gmin > gmax) gmin = gmax; }
-        else if (e.which == 'v'.charCodeAt(0) ||
-                 e.which == 'V'.charCodeAt(0)) { bmin -= 0.05; if (bmin < 0.0) bmin = 0.0; }
-        else if (e.which == 'n'.charCodeAt(0) ||
-                 e.which == 'N'.charCodeAt(0)) { bmin += 0.05; if (bmin > bmax) bmin = bmax; }
+        else if (e.which == 'e'.charCodeAt(0)) { rmin -= 0.05; if (rmin < 0.0) rmin = 0.0; }
+        else if (e.which == 't'.charCodeAt(0)) { rmin += 0.05; if (rmin > rmax) rmin = rmax; }
+        else if (e.which == 'f'.charCodeAt(0)) { gmin -= 0.05; if (gmin < 0.0) gmin = 0.0; }
+        else if (e.which == 'h'.charCodeAt(0)) { gmin += 0.05; if (gmin > gmax) gmin = gmax; }
+        else if (e.which == 'v'.charCodeAt(0)) { bmin -= 0.05; if (bmin < 0.0) bmin = 0.0; }
+        else if (e.which == 'n'.charCodeAt(0)) { bmin += 0.05; if (bmin > bmax) bmin = bmax; }
+        else if (e.which == 'E'.charCodeAt(0))
+	{ rphase -= 0.05; if (rphase < 0.0) rphase = 1.0 - rphase; }
+        else if (e.which == 'T'.charCodeAt(0))
+	{ rphase += 0.05; if (rphase > 1.0) rphase = rphase - 1.0; }
+        else if (e.which == 'F'.charCodeAt(0))
+	{ gphase -= 0.05; if (gphase < 0.0) gphase = 1.0 - gphase; }
+        else if (e.which == 'H'.charCodeAt(0))
+	{ gphase += 0.05; if (gphase > 1.0) gphase = gphase - 1.0; }
+        else if (e.which == 'V'.charCodeAt(0))
+	{ bphase -= 0.05; if (bphase < 0.0) bphase = 1.0 - bphase; }
+        else if (e.which == 'N'.charCodeAt(0))
+	{ bphase += 0.05; if (bphase > 1.0) bphase = bphase - 1.0; }
         else if (e.which == 'c'.charCodeAt(0)) coloring = (coloring + 1) % ncolors;
         else if (e.which == 'C'.charCodeAt(0)) coloring = (coloring - 1) % ncolors;
         else if (e.which == '?'.charCodeAt(0)) toggleHelp();
@@ -485,7 +478,11 @@ if (!window.WebGLRenderingContext) {
     function draw() {
         // Color palette is supplied as a texture
         var textureUnit = 15;
-        var palette_data = create_rainbow(rmin, rmax, gmin, gmax, bmin, bmax);
+	var palette_data = create_rainbow_1d([rmin, gmin, bmin],
+					     [rmax, gmax, bmax],
+					     [rphase, gphase, bphase],
+					     50);
+        //var palette_data = create_rainbow(rmin, rmax, gmin, gmax, bmin, bmax);
         gl.activeTexture(gl.TEXTURE0 + textureUnit);
         var palette_texture = textureFromFloats(gl, palettesize, 1, palette_data);
         gl.bindTexture(gl.TEXTURE_2D, palette_texture);
