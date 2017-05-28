@@ -1,248 +1,27 @@
-    <!DOCTYPE html>
-    <html>
+<!DOCTYPE html>
+<html>
+  <head>
     <meta charset="UTF-8">
     <link href="wangs.css" rel="stylesheet" type="text/css">
     <title>Quasicrystal visualization -- press ? for usage</title>
     <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.10.1/jquery.min.js"></script>
+  </head>
+  <body>
     <canvas id='c'></canvas>
     <div id="helpButton">?</div>
-    <div id="help"><h2>Quasicrystal visualization -- interference between plane waves</h2><br>
-    <h3>Keybindings:</h3><br>
-    [ and ] to change wave count<br>
-    , and . to change speed<br>
-    - and = to change zoom<br>
-    r and R to change red phase<br>
-    g and G to change green phase<br>
-    b and B to change blue phase<br>
+    <div id="help">
+      <h2>Quasicrystal visualization -- interference between plane waves</h2><br>
+      <h3>Keybindings:</h3><br>
+      [ and ] to change wave count<br>
+      , and . to change speed<br>
+      - and = to change zoom<br>
+      r and R to change red phase<br>
+      g and G to change green phase<br>
+      b and B to change blue phase<br>
     </div>
-    <script src='webgl-utils.js'></script>
-    <script id='vshader' type='x-shader'>
-    attribute vec2 aVertexPosition;
-
-void main() {
-
-    gl_Position = vec4(aVertexPosition, 0, 1);
-}
-</script>
-    <script id='fshader' type='x-shader'>
-#ifdef GL_FRAGMENT_PRECISION_HIGH
-    precision highp float;
-#else
-precision mediump float;
-#endif
-
-precision mediump int;
-
-const float kPi = 3.1415926535;
-const int kMaxNumWaves = 22;
-
-uniform int num_waves;
-uniform float t;
-uniform float freq;
-uniform float ra;
-uniform float ga;
-uniform float ba;
-uniform float ck;
-uniform float co;
-uniform vec2 res;
-uniform vec4 bins;
-
-vec4 waves() {
-    float x = gl_FragCoord.x - 0.5 * res.x;
-    float y = gl_FragCoord.y - 0.5 * res.y;
-
-    float coses[kMaxNumWaves];
-    float sines[kMaxNumWaves];
-
-    float power = sqrt(bins.x*bins.x + bins.y*bins.y + bins.z*bins.z + bins.w*bins.w);
-
-    for (int i = 0; i < kMaxNumWaves; ++i) {
-        float angle = float(i) * kPi / float(num_waves);
-        coses[i] = cos(angle);
-        sines[i] = sin(angle);
-        if (i == num_waves) break;
-    }
-
-    // Compute intensity over the sum of waves.
-    float p = 0.0;
-    for (int w = 0; w < kMaxNumWaves; ++w) {
-        float cx = coses[w] * x;
-        float sy = sines[w] * y;
-        // vec4 phase_vec = texture1D(phases, (float(w) + 0.5) / float(kMaxNumWaves));
-        float phase = t * 0.01 * float(w);
-        p += 0.5 * (cos(freq * (cx + sy) + phase + power*power) + 1.0);
-        if (w == num_waves) break;
-    }
-
-    float cc = cos(kPi * p);
-    float ss = sin(kPi * p);
-    float rr = cos(ra) * cc + sin(ra) * ss;
-    float gg = cos(ga) * cc + sin(ga) * ss;
-    float bb = cos(ba) * cc + sin(ba) * ss;
-    float r = ck * 0.5 * rr + co;
-    float g = ck * 0.5 * gg + co - bins.x * bins.z;
-    float b = ck * 0.5 * bb + co;
-
-    return vec4(r, g, b, 1.0);
-}
-
-void main() {
-    gl_FragColor = waves();
-}
-</script>
-    <script src="sound.js"></script>
-    <script>
-    kPi = 3.1415926535;
-//return an obect with the dimension of the viewport of the browser
-if (!window.WebGLRenderingContext) {
-    // the browser doesn't even know what WebGL is
-    window.location = "http://get.webgl.org";
-} else {
-    var c = document.getElementById('c');
-    var gl = c.getContext('experimental-webgl');
-    if (!gl) {
-	window.location = "http://get.webgl.org/troubleshooting";
-    }
-    var kMaxNumWaves = 22;
-    var vertexPosBuffer = screenQuad(gl);
-
-    var vs = document.getElementById('vshader').textContent;
-    var fs = document.getElementById('fshader').textContent;
-    var program = createProgram(vs,fs);
-    gl.useProgram(program);
-    program.vertexPosAttrib = gl.getAttribLocation(program, 'aVertexPosition');
-    program.freq = gl.getUniformLocation(program, 'freq');
-    program.res = gl.getUniformLocation(program, 'res');
-    program.t = gl.getUniformLocation(program, 't');
-    program.ra = gl.getUniformLocation(program, 'ra');
-    program.ga = gl.getUniformLocation(program, 'ga');
-    program.ba = gl.getUniformLocation(program, 'ba');
-    program.ck = gl.getUniformLocation(program, 'ck');
-    program.co = gl.getUniformLocation(program, 'co');
-    program.bins = gl.getUniformLocation(program, 'bins');
-    program.num_waves = gl.getUniformLocation(program, 'num_waves');
-    gl.enableVertexAttribArray(program.vertexPosArray);
-    gl.vertexAttribPointer(program.vertexPosAttrib, vertexPosBuffer.itemSize, gl.FLOAT, false, 0, 0);
-
-    var dt = 1.0;
-    var t = 0;
-    var freq = 0.2;
-    var n = 8;
-    var ra = 0;
-    var ga = 0.2 * kPi;
-    var ba = 0.5 * kPi;
-    var ck = 1.6;
-    var co = 0.7;
-
-    var bins = [ 0, 0, 0, 0 ];
-
-    try {
-        audio_setup();
-    } catch (e) {
-        console.error('Javascript is a dick: ', e);
-    }
-
-    var helpTimer;
-    var helpShown = false;
-    function toggleHelp() {
-        if (helpTimer) clearTimeout(helpTimer);
-        if (helpShown) {
-            helpShown = false;
-            $("#help").hide();
-        } else {
-            $("#help").show();
-            helpShown = true;
-            helpTimer = setTimeout(function () {
-                $("#help").fadeOut(1000);
-                helpShown = false;
-            }, 4000);
-        }
-    }
-
-    function keyhandler(e) {
-	if (e.which == ','.charCodeAt(0)) dt = dt - 0.1;
-	else if (e.which == '.'.charCodeAt(0)) dt = dt + 0.1;
-	else if (e.which == '-'.charCodeAt(0)) freq = freq*1.1;
-	else if (e.which == '='.charCodeAt(0)) freq = freq*0.909;
-	else if (e.which == '['.charCodeAt(0)) n = Math.max(n - 1, 1);
-	else if (e.which == ']'.charCodeAt(0)) n = Math.min(n + 1, kMaxNumWaves);
-	else if (e.which == 'r'.charCodeAt(0)) ra = ra - kPi / 16.0;
-	else if (e.which == 'R'.charCodeAt(0)) ra = ra + kPi / 16.0;
-	else if (e.which == 'g'.charCodeAt(0)) ga = ga - kPi / 16.0;
-	else if (e.which == 'G'.charCodeAt(0)) ga = ga + kPi / 16.0;
-	else if (e.which == 'b'.charCodeAt(0)) ba = ba - kPi / 16.0;
-	else if (e.which == 'B'.charCodeAt(0)) ba = ba + kPi / 16.0;
-	else if (e.which == 'k'.charCodeAt(0)) ck = Math.max(ck - 0.05, 0);
-	else if (e.which == 'K'.charCodeAt(0)) ck = Math.min(ck + 0.05, 10);
-	else if (e.which == 'o'.charCodeAt(0)) co = Math.max(co - 0.05, 0);
-	else if (e.which == 'O'.charCodeAt(0)) co = Math.min(co + 0.05, 10);
-	else if (e.which == '?'.charCodeAt(0)) toggleHelp();
-	else if (e.which == '/'.charCodeAt(0)) toggleHelp();
-	console.log(ra, ga, ba, ck, co);
-    };
-    document.onkeypress = keyhandler;
-
-    // Thanks, Erika!
-    function setsize() {
-	c.width = $(window).width();
-	c.height = $(window).height();
-	gl.uniform2f(program.res, c.width, c.height);
-	gl.viewport(0, 0, c.width, c.height);
-    };
-
-    $(window).on('resize', setsize);
-    $(window).on('load', setsize);
-
-    function calc_bin(offset, idx, count) {
-	newbin = 0;
-	for (i = offset; i < offset + count; i++)
-	    newbin += freqarr[i];
-	newbin = newbin / (count * 255);
-	bins[idx] = newbin; // bins[idx] * 0.8 + newbin * 0.2;
-    }
-    function calc_bins() {
-	if (analyser) {
-	    analyser.getByteFrequencyData(freqarr);
-	    // calc_bin(0, 0, 10);
-	    // calc_bin(10, 1, 12);
-	    // calc_bin(22, 2, 26);
-	    // calc_bin(48, 3, 972);
-	    calc_bin(0, 0, 5);
-	    calc_bin(5, 1, 6);
-	    calc_bin(11, 2, 13);
-	    calc_bin(24, 3, 488);
-	}
-    }
-    function draw() {
-	gl.uniform1f(program.freq, freq);
-	gl.uniform1f(program.t, t);
-	gl.uniform1i(program.num_waves, n);
-	gl.uniform1f(program.ra, ra);
-	gl.uniform1f(program.ga, ga);
-	gl.uniform1f(program.ba, ba);
-	gl.uniform1f(program.ck, ck);
-	gl.uniform1f(program.co, co);
-	calc_bins();
-	gl.uniform4f(program.bins, bins[0], bins[1], bins[2], bins[3]);
-	gl.drawArrays(gl.TRIANGLE_STRIP, 0, vertexPosBuffer.numItems);
-    }
-
-    function animate() {
-	t += dt;
-    }
-
-    function drawFrame() {
-	requestAnimationFrame(drawFrame);
-	draw();
-	animate();
-    }
-
-    drawFrame();
-}
-
-toggleHelp();
-$("#helpButton").click(function () {
-    toggleHelp();
-});
-</script>
-    </html>
+    <script src="webgl-utils.js"></script>
+    <script src="audio.js"></script>
+    <script src="quasicrystals_shader.js"></script>
+    <script src="quasicrystals.js"></script>
+  </body>
+</html>
